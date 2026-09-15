@@ -1018,10 +1018,16 @@ async function boot(session) {
   });
 
   // Resign: one confirming click (no blocking dialog), then concede via the sim.
+  // A spectator has nothing to concede — and the lockstep drops a spectator's staged
+  // commands, so an in-game resign could never reach the sim anyway. The button
+  // becomes "Stop watching": it ends the game on the spot and shows the score screen,
+  // so the bots' match still gets its final accounting.
   const resignBtn = $('opt-resign');
   let resignArmed = false;
+  if (session.spectate) { resignBtn.textContent = 'Stop watching'; resignBtn.classList.replace('danger', 'backmenu'); }
   resignBtn.onclick = () => {
     if (gameOverShown) { settingsPop.style.display = 'none'; toMainMenu(); return; }
+    if (session.spectate) { settingsPop.style.display = 'none'; over = true; showGameOver('Stopped watching', null); return; }
     if (!resignArmed) { resignArmed = true; resignBtn.textContent = 'Confirm — resign?'; return; }
     resignArmed = false; resignBtn.textContent = 'Resign game';
     settingsPop.style.display = 'none';
