@@ -1,0 +1,24 @@
+diff --git a/ZZZKBot/Source/ZZZKBotAIModule.cpp b/ZZZKBot/Source/ZZZKBotAIModule.cpp
+index 1da36dd..cc98823 100644
+--- a/ZZZKBot/Source/ZZZKBotAIModule.cpp
++++ b/ZZZKBot/Source/ZZZKBotAIModule.cpp
+@@ -2463,10 +2463,17 @@ void ZZZKBotAIModule::onFrame()
+                     }
+                 }
+ 
++                // Web port: no filesystem means no learning data ever loads, so the sampled
++                // strategy below was never applied and every game opened with the default
++                // 4pool. With nothing recorded at all, apply the weighted-random sample
++                // unconditionally so each game plays a different opening (genRand is seeded
++                // from std::random_device, which is real entropy under WASI).
++                const bool noLearningData = learningMapAuto.numOutcomes.empty();
+                 // If have lost at least 5 games using the configured/default strategy...
+                 const auto& ssToOverallNumLossesIter = learningMapAuto.enemyRaceInitMap.numOutcomes[false].find(ss);
+-                if (ssToOverallNumLossesIter != learningMapAuto.enemyRaceInitMap.numOutcomes[false].end() &&
+-                    ssToOverallNumLossesIter->second >= 5)
++                if (noLearningData ||
++                    (ssToOverallNumLossesIter != learningMapAuto.enemyRaceInitMap.numOutcomes[false].end() &&
++                    ssToOverallNumLossesIter->second >= 5))
+                 {
+                     if (thompsonSampleBest >= 0.0)
+                     {

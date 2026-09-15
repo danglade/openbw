@@ -45,6 +45,7 @@ clone_pin https://github.com/Cmccrave/McRave.git mcrave 7d1719a22d8b896f957abae5
 
 # Apply the ports.
 python3 "$HERE/patch-vendor.py"                    # BWAPI server (wasi net, throws->abort, external-game)
-apply_patch mcrave "$HERE/mcrave.patch"            # McRave + BWEB/BWEM/Horizon MSVC->clang fixes
+apply_patch mcrave "$HERE/mcrave.patch"            # McRave + BWEB/BWEM/Horizon MSVC->clang fixes + srand for build variety
+apply_patch ZZZKBot "$HERE/zzzk.patch"             # apply the sampled strategy with no learning data (variety per game)
 
 echo "vendored into $V — now run ./build-wasm-bot.sh (ZZZKBot) or BOT=mcrave ./build-web.sh"

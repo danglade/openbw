@@ -140,6 +140,32 @@ index dee4ec8..63518a7 100644
              for (auto &[parent, _] : t.requiredUnits()) {
                  if (parent == Zerg_Larva || parent.isWorker())
                      continue;
+diff --git a/Source/McRave/Builds/All/Learning.cpp b/Source/McRave/Builds/All/Learning.cpp
+index 4be0dc9..9fda97a 100644
+--- a/Source/McRave/Builds/All/Learning.cpp
++++ b/Source/McRave/Builds/All/Learning.cpp
+@@ -1,7 +1,9 @@
+ #include "Learning.h"
+ 
++#include <cstdlib>
+ #include <fstream>
+ #include <iomanip>
++#include <random>
+ 
+ #include "BuildOrder.h"
+ #include "Builds/All/All.h"
+@@ -494,6 +496,11 @@ namespace McRave::Learning {
+ 
+     void onStart()
+     {
++        // Web port: rand() drives the UCB exploration noise in getBestBuild() but was never
++        // seeded — under WASI every page load replays the same sequence, so the "random"
++        // build pick came out identical every game. Seed from real entropy (random_get).
++        srand(std::random_device{}());
++
+         if (!Broodwar->enemy() || Players::vFFA() || Players::vTVB()) {
+             getDefaultBuild();
+             return;
 diff --git a/Source/McRave/Info/Building/Buildings.cpp b/Source/McRave/Info/Building/Buildings.cpp
 index 877eea3..9b94a5b 100644
 --- a/Source/McRave/Info/Building/Buildings.cpp

@@ -45,6 +45,12 @@ void bot_view_attach(void* state_ptr, int slot) {
   BW::Game game = BW::makeExternalGame(state_ptr, slot);
   g_h = new BWAPI::BroodwarImpl_handle(game);
   (*g_h)->specifiedModule = new OPENBW_BOT_MODULE_CLASS();
+  // The external game skips the lobby paths that record each player's picked race,
+  // so Player::getRace() reports the unscouted human as Unknown and a bot like
+  // McRave plays its vs-Random book every game. The web lobby has no Random
+  // option, so the actual race IS the picked race.
+  for (int i = 0; i < BW::PLAYABLE_PLAYER_COUNT; ++i)
+    (*g_h)->lastKnownRaceBeforeStart[i] = BWAPI::Race(game.getPlayer(i).nRace());
   // Capture the bot's orders instead of feeding BWData's sync server. Frame each
   // command [u16 len][bytes] so it drops straight into apply_bw_commands.
   (*g_h)->bwgame.setCommandSink([](const uint8_t* buf, size_t n) {

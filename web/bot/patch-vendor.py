@@ -190,4 +190,13 @@ patch(bwdata, [
      '__attribute__((weak)) void fatal_error_str(a_string str){\n  bwgame::error("%s", str);'),
 ])
 
+# --- Port 6: CMake 4 refuses a project with no cmake_minimum_required at all
+#     (CMP0000 is now a hard error; CMAKE_POLICY_VERSION_MINIMUM doesn't cover the
+#     missing-entirely case). Prepend one to the top-level CMakeLists. ---
+cml = os.path.join(BWAPI, "CMakeLists.txt")
+patch(cml, [
+    ('option(USE_OPENBW "Use OpenBW" ON)',
+     'cmake_minimum_required(VERSION 3.5)\n\noption(USE_OPENBW "Use OpenBW" ON)'),
+])
+
 print("patch-vendor: done")
