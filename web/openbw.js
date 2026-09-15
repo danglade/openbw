@@ -33,6 +33,17 @@ async function eloCall(body) {
   return j;
 }
 
+// Abandon guard: while a rated game is undecided this holds the loss report the
+// page fires if it dies (tab closed, reload, navigation) — leaving a rated game IS
+// the loss, otherwise closing the tab would dodge the rating hit. Cleared the
+// moment a real result is reported. sendBeacon survives page teardown.
+let ratedPending = null;
+addEventListener('pagehide', () => {
+  if (!ratedPending || DEV) return;
+  try { navigator.sendBeacon('/api/elo', new Blob([JSON.stringify(ratedPending)], { type: 'application/json' })); } catch {}
+  ratedPending = null;
+});
+
 function logGameStart(row) {
   if (DEV) return;
   try {
@@ -784,6 +795,14 @@ async function boot(session) {
     x.openbw_init(...winSize(), slots[0].race, slots[0].slot);
   }
   hb('boot:engine-ready');
+  // Arm the abandon guard for rated games (vs a bot, signed in, not spectating).
+  ratedPending = session.bot && !session.spectate && eloState.token ? {
+    action: 'report',
+    token: eloState.token,
+    opponent: session.bot.module.replace(/^openbw-|\.wasm$/g, ''),
+    difficulty: { 0: 'hard', 60: 'easy', 300: 'normal' }[session.bot.apm ?? 0],
+    result: 'loss',
+  } : null;
   logGameStart({
     map: session.mapFile,
     mode: session.spectate ? 'spectate' : session.bot ? 'vs-bot' : link ? '1v1' : 'solo',
@@ -968,8 +987,10 @@ async function boot(session) {
     }
     $('go-stats').innerHTML = html;
     // Rated game (signed in, vs a bot, decided): report the result — a resign lands
-    // here as a Defeat, so quitting still counts — and show the rating move.
+    // here as a Defeat, so quitting still counts — and show the rating move. The
+    // abandon guard disarms: the game has its real result now.
     if (session.bot && !session.spectate && (won === true || won === false) && eloState.token) {
+      ratedPending = null;
       eloCall({
         action: 'report',
         token: eloState.token,
