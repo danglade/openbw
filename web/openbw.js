@@ -19,6 +19,20 @@ const DEV = BUILD.startsWith('__') || location.hostname === 'localhost' || locat
 // own same-origin /api/log (a serverless function writing to the deployment's Blob
 // store — no third party, no keys in the page). /api/stats renders the rows. Never
 // fires in dev, and nothing identifying is sent — just what game was set up.
+// Elo ladder account (see web/api/elo.js). Kept in localStorage; the token is a
+// signed, expiring claim on the username — losing it just means signing in again.
+const eloState = { token: '', name: '', rating: 0 };
+try { Object.assign(eloState, JSON.parse(localStorage.getItem('openbw-elo') || '{}')); } catch {}
+function eloSave() { try { localStorage.setItem('openbw-elo', JSON.stringify(eloState)); } catch {} }
+async function eloCall(body) {
+  const r = await fetch('/api/elo', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `error ${r.status}`);
+  return j;
+}
+
 function logGameStart(row) {
   if (DEV) return;
   try {
@@ -953,6 +967,22 @@ async function boot(session) {
               `Tip: ${weakest.text}</td></tr>`;
     }
     $('go-stats').innerHTML = html;
+    // Rated game (signed in, vs a bot, decided): report the result — a resign lands
+    // here as a Defeat, so quitting still counts — and show the rating move.
+    if (session.bot && !session.spectate && (won === true || won === false) && eloState.token) {
+      eloCall({
+        action: 'report',
+        token: eloState.token,
+        opponent: session.bot.module.replace(/^openbw-|\.wasm$/g, ''),
+        difficulty: { 0: 'hard', 60: 'easy', 300: 'normal' }[session.bot.apm ?? 0],
+        result: won ? 'win' : 'loss',
+      }).then((j) => {
+        eloState.rating = j.rating; eloSave();
+        $('go-stats').insertAdjacentHTML('beforeend',
+          `<tr><td colspan="6" style="text-align:center;padding-top:6px;color:#cbd5e1">` +
+          `Ladder: <b style="color:#38bdf8">${j.rating}</b> (${j.delta >= 0 ? '+' : ''}${j.delta})</td></tr>`);
+      }).catch(() => {});
+    }
     const t = $('go-title');
     t.textContent = title;
     t.className = won === true ? 'win' : won === false ? 'lose' : '';
@@ -1763,6 +1793,28 @@ if (diffSlider) {
     try { localStorage.setItem('openbw-difficulty', diffSlider.value); } catch {}
   });
   renderDifficulty();
+}
+
+// Ladder sign-in (guarded like the slider against a stale cached index.html).
+if ($('elo-login')) {
+  const inBox = $('ladder-in'), outBox = $('ladder-out'), msg = $('elo-msg');
+  const renderElo = () => {
+    const on = !!eloState.token;
+    inBox.style.display = on ? 'none' : 'inline-flex';
+    outBox.style.display = on ? 'inline-flex' : 'none';
+    if (on) $('elo-who').textContent = `${eloState.name} (${eloState.rating})`;
+  };
+  const auth = (action) => async () => {
+    msg.textContent = '';
+    try {
+      const j = await eloCall({ action, name: $('elo-name').value, pin: $('elo-pin').value });
+      Object.assign(eloState, j); eloSave(); renderElo();
+    } catch (e) { msg.textContent = e.message; }
+  };
+  $('elo-login').onclick = auth('login');
+  $('elo-register').onclick = auth('register');
+  $('elo-logout').onclick = () => { Object.assign(eloState, { token: '', name: '', rating: 0 }); eloSave(); renderElo(); msg.textContent = ''; };
+  renderElo();
 }
 
 $('start-game').onclick = () => {

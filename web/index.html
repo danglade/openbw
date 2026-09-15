@@ -363,6 +363,21 @@
     <label id="spectate-row" style="display:flex;align-items:center;gap:8px;justify-content:center;margin:10px 0;cursor:pointer">
       <input type="checkbox" id="spectate"> Bot vs Bot (spectate)
     </label>
+    <div id="ladder-row" style="display:flex;align-items:center;gap:8px;justify-content:center;margin:10px 0;flex-wrap:wrap">
+      <span style="color:#cbd5e1;font-size:13px">Ladder</span>
+      <span id="ladder-in" style="display:inline-flex;gap:6px;align-items:center">
+        <input id="elo-name" placeholder="username" size="10" maxlength="16" autocomplete="username">
+        <input id="elo-pin" placeholder="PIN" type="password" size="5" maxlength="64" autocomplete="current-password">
+        <button id="elo-login">Sign in</button>
+        <button id="elo-register">Register</button>
+      </span>
+      <span id="ladder-out" style="display:none;gap:8px;align-items:center">
+        <span id="elo-who" style="color:#38bdf8;font-weight:600"></span>
+        <button id="elo-logout">Sign out</button>
+      </span>
+      <a href="/api/elo?action=table" target="_blank" style="color:#38bdf8;font-size:13px">Leaderboard</a>
+      <span id="elo-msg" style="color:#f87171;font-size:13px"></span>
+    </div>
     <div id="lobby-hint" class="hint"></div>
     <p><button id="start-game">Start Game</button></p>
     <div id="mp">
@@ -434,7 +449,6 @@
 
       <div id="mp-status"></div>
     </div>
-    <div class="hint">Or <a href="https://retroonline.net/Windows/StarCraft%3A%20Brood%20War" target="_blank" rel="noopener">play the original game</a></div>
   </div>
 </div></div>
 
