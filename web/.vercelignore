@@ -1,0 +1,19 @@
+# Deploy only what the browser needs: index.html, openbw.js, net.js, openbw.wasm,
+# maps/, bot/. (This file replaces .gitignore for uploads — .gitignore excludes
+# *.wasm, which we need to ship.)
+.gitignore
+CNAME
+*.cpp
+*.h
+*.py
+*.sh
+*.mjs
+*.ppm
+*.png
+*.dSYM/
+build.err
+build.log
+__pycache__/
+data/
+openbw_play
+openbw_bridge

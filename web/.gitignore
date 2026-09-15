@@ -19,3 +19,4 @@ maps/*
 # render dumps
 *.ppm
 *.png
+.vercel
