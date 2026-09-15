@@ -15,17 +15,16 @@ const BUILD = '__BUILD__';
 // so test for the placeholder's underscores instead of matching it literally.
 const DEV = BUILD.startsWith('__') || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 
-// Game-start analytics: one anonymous row per game started, fire-and-forget into a
-// dedicated Supabase project (insert-only for the anon key; rows are read in the
-// Supabase dashboard). No-op until ANALYTICS is filled in, and never in dev. Nothing
-// identifying is sent — just what game was set up.
-const ANALYTICS = { url: '', key: '' };   // { url: 'https://<ref>.supabase.co', key: '<publishable key>' }
+// Game-start analytics: one anonymous row per game started, fire-and-forget to our
+// own same-origin /api/log (a serverless function writing to the deployment's Blob
+// store — no third party, no keys in the page). /api/stats renders the rows. Never
+// fires in dev, and nothing identifying is sent — just what game was set up.
 function logGameStart(row) {
-  if (DEV || !ANALYTICS.url || !ANALYTICS.key) return;
+  if (DEV) return;
   try {
-    fetch(`${ANALYTICS.url}/rest/v1/game_starts`, {
+    fetch('/api/log', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', apikey: ANALYTICS.key, authorization: `Bearer ${ANALYTICS.key}` },
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify(row),
       keepalive: true,   // survives an immediate navigation
     }).catch(() => {});
