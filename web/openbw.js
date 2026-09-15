@@ -898,6 +898,36 @@ async function boot(session) {
     }
     html += `<tr><td colspan="6" style="color:#64748b;text-align:center;padding-top:12px">` +
             `Game length ${(secs/60)|0}:${String(secs%60).padStart(2,'0')}</td></tr>`;
+    // Performance readout for the human player (not when spectating bots): APM from the
+    // lockstep's command count, income and spending efficiency from the sim's cumulative
+    // counters vs what's still floating. Graded on the three, weakest metric gets the tip.
+    const mine = rows.map((l) => l.split('\t').map(Number)).find((r) => r[0] === 1);
+    if (mine && !session.spectate && secs > 30) {
+      const mins = secs / 60;
+      const apm = Math.round(lockstep.localActions / mins);
+      const gathered = mine[5] + mine[6];
+      const res = readCString(x.openbw_resources()).split('\t').map(Number);
+      const floating = res[0] + res[1];
+      const spent = gathered > 0 ? Math.max(0, Math.min(100, Math.round(100 * (gathered - floating) / gathered))) : 0;
+      const income = Math.round(gathered / mins);
+      // Normalize each to 0-100: 100% spent, 700/min income, 50 APM = full marks.
+      const parts = [
+        { pts: spent, text: `keep your money spent — unspent minerals win no fights` },
+        { pts: Math.min(100, income / 7), text: `build more workers early — more mining means more of everything` },
+        { pts: Math.min(100, apm * 2), text: `stay busy — queue units and give orders more often` },
+      ];
+      const total = 0.4 * parts[0].pts + 0.3 * parts[1].pts + 0.3 * parts[2].pts;
+      const grade = total >= 85 ? 'S' : total >= 70 ? 'A' : total >= 55 ? 'B' : total >= 40 ? 'C' : 'D';
+      const gcolor = { S: '#4ade80', A: '#4ade80', B: '#38bdf8', C: '#fbbf24', D: '#f87171' }[grade];
+      const weakest = parts.reduce((a, b) => (b.pts < a.pts ? b : a));
+      html += `<tr><td colspan="6" style="text-align:center;padding-top:10px">` +
+              `<span style="display:inline-block;min-width:26px;padding:2px 8px;border-radius:8px;` +
+              `background:${gcolor}22;color:${gcolor};font-weight:800;font-size:18px">${grade}</span>` +
+              `<span style="color:#cbd5e1;margin-left:10px">APM ${apm} · Income ${income}/min · Spent ${spent}% of income</span>` +
+              `</td></tr>` +
+              `<tr><td colspan="6" style="color:#64748b;text-align:center;padding-top:4px;font-size:13px">` +
+              `Tip: ${weakest.text}</td></tr>`;
+    }
     $('go-stats').innerHTML = html;
     const t = $('go-title');
     t.textContent = title;
@@ -1680,6 +1710,31 @@ mapSelect.addEventListener('change', () => { renderMapInfo(); buildSlots(); });
 $('spectate').addEventListener('change', buildSlots);   // toggling swaps "You" for a 2nd bot
 renderMapInfo(); buildSlots();
 
+// Bot difficulty. The bot's brain always runs every frame (skipping frames broke its
+// event tracking and made it act broken, not weak); instead the slider degrades it the
+// way a weaker human plays. `delay`: sim frames before its commands take effect (24 fps —
+// Hard is BW's stock ~125 ms bot latency, Easy a sleepy full second). `apm`: an
+// actions-per-minute budget; commands over budget are dropped and the bot re-issues them
+// later, so micro gets clumsy and macro slow, but never broken. 0 = uncapped. Hard is the
+// bots at full tournament strength. Remembered across visits.
+const DIFFICULTIES = [
+  { name: 'Easy', delay: 24, apm: 60 },
+  { name: 'Normal', delay: 8, apm: 300 },
+  { name: 'Hard', delay: 3, apm: 0 },
+];
+// Guarded: a cached index.html from before the slider shipped must not brick the lobby.
+const diffSlider = $('difficulty');
+const botDiff = () => (diffSlider ? DIFFICULTIES[+diffSlider.value] : DIFFICULTIES[2]);
+if (diffSlider) {
+  try { diffSlider.value = localStorage.getItem('openbw-difficulty') ?? '2'; } catch {}
+  const renderDifficulty = () => { $('difficulty-name').textContent = DIFFICULTIES[+diffSlider.value].name; };
+  diffSlider.addEventListener('input', () => {
+    renderDifficulty();
+    try { localStorage.setItem('openbw-difficulty', diffSlider.value); } catch {}
+  });
+  renderDifficulty();
+}
+
 $('start-game').onclick = () => {
   $('controls').style.display = 'none';
   const file = mapSelect.value;
@@ -1694,8 +1749,8 @@ $('start-game').onclick = () => {
     // A normal game (full UI) rendered as a spectator: bot 1 drives slot 0 here, bot 2 runs
     // on a shadow replica boot() spins up. See the spectate handling in boot().
     const session = { slots, mySlot: picks[0], mapFile: file, spectate: true,
-                      bot:  { slot: picks[0], module: b1.module },
-                      bot2: { slot: picks[1], module: b2.module } };
+                      bot:  { slot: picks[0], module: b1.module, delay: botDiff().delay, apm: botDiff().apm },
+                      bot2: { slot: picks[1], module: b2.module, delay: botDiff().delay, apm: botDiff().apm } };
     boot(session).catch((e) => { setMsg('Error: ' + e.message); console.error(e); });
     return;
   }
@@ -1708,7 +1763,7 @@ $('start-game').onclick = () => {
   if (botSel) {
     const o = OPPONENTS[botSel.value];
     slots.push({ slot: picks[1], race: o.race });
-    session.bot = { slot: picks[1], module: o.module };
+    session.bot = { slot: picks[1], module: o.module, delay: botDiff().delay, apm: botDiff().apm };
   }
   // No bot -> a single occupied slot -> the sim runs non-competitive (no auto win/lose).
   boot(session).catch((e) => { setMsg('Error: ' + e.message); console.error(e); });
@@ -1726,7 +1781,7 @@ $('map-file').addEventListener('change', async (e) => {
     const slots = [{ slot: 0, race: resolveRace(+slotsBox._you.value) }];
     const session = { slots, mySlot: 0, mapFile: id };
     const botSel = slotsBox._opps.find((s) => s.value !== 'none');
-    if (botSel) { const o = OPPONENTS[botSel.value]; slots.push({ slot: 1, race: o.race }); session.bot = { slot: 1, module: o.module }; }
+    if (botSel) { const o = OPPONENTS[botSel.value]; slots.push({ slot: 1, race: o.race }); session.bot = { slot: 1, module: o.module, delay: botDiff().delay, apm: botDiff().apm }; }
     $('controls').style.display = 'none';
     boot(session).catch((err) => { setMsg('Error: ' + err.message); console.error(err); });
   } catch (err) { setMsg('Error reading map: ' + err.message); console.error(err); }

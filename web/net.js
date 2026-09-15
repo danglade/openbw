@@ -274,12 +274,24 @@ export class Lockstep {
     this.localSlot = localSlot;
     this.delay = delay;
     this.send = send;
-    // Command latency for bot-controlled slots (see BOT_LATENCY); only meaningful with a bot.
-    this.botDelay = (bot || bot2) ? botDelay : 0;
+    // Command latency for bot-controlled slots (see BOT_LATENCY); only meaningful with a
+    // bot. Difficulty may stretch it (bot.delay): the bot still thinks every frame — its
+    // internal event tracking stays intact — but its orders take effect that much later,
+    // like a player with slow reactions.
+    this.botDelay = (bot || bot2) ? ((bot && bot.delay) || botDelay) : 0;
     this.botSeeded = false;
     // A local AI producing one slot's turns (vs-Computer). It reads the shared sim and
     // emits BW command bytes just like the human, so it's just another local producer.
-    this.bot = bot;   // { slot } or null
+    this.localActions = 0;   // commands the local player issued (for the APM readout)
+    this.bot = bot;   // { slot, delay?, apm? } or null
+    // Difficulty: cap the bot's actions per minute with a token bucket. Each frame earns
+    // apm/60/24 command tokens (24 sim fps); a frame's command burst is kept prefix-first
+    // (selection + the order it sets up stay paired) and the overflow is dropped — the bot
+    // notices the unexecuted order next frame and re-issues, so play degrades into slow,
+    // clumsy macro and micro instead of broken units. 0 = uncapped (full strength).
+    this.botApm = (bot && bot.apm) || 0;
+    // One bucket per bot (spectate runs two) — small starting burst each.
+    this.botTokens = [0, 1].map(() => (this.botApm ? Math.max(2, this.botApm / 30) : 0));
     // Bot-vs-bot spectate: a second bot on a second sim replica (`shadow`, a { x, memory }).
     // Each frame both bots' commands are applied to BOTH replicas so they stay bit-identical;
     // the local player is a spectator (no human turn). shadow/bot2 are null for every other mode.
@@ -327,16 +339,40 @@ export class Lockstep {
     if (!len) return EMPTY;
     const out = new Uint8Array(this.memory.buffer, this.x.openbw_out_ptr(), len).slice();
     this.x.openbw_out_clear();
+    // Count the [u16 len]-framed commands for the end-of-game APM readout.
+    for (let i = 0; i + 2 <= out.length; i += 2 + (out[i] | (out[i + 1] << 8)))
+      this.localActions++;
     return out;
   }
 
   /** Run the bot's onFrame on a replica and pull its commands (same framing). */
-  #drainBot(x = this.x, memory = this.memory) {
+  #drainBot(x = this.x, memory = this.memory, which = 0) {
     x.openbw_bot_tick();
+    this.#earnTokens(which);
     const len = x.openbw_bot_out_len();
     if (!len) return EMPTY;
-    const out = new Uint8Array(memory.buffer, x.openbw_bot_out_ptr(), len).slice();
+    let out = new Uint8Array(memory.buffer, x.openbw_bot_out_ptr(), len).slice();
     x.openbw_bot_out_clear();
+    if (this.botApm) out = this.#capCommands(out, which);
+    return out;
+  }
+
+  /** Accrue one bot's difficulty APM budget, once per sim frame (24 fps). */
+  #earnTokens(which) {
+    if (!this.botApm) return;
+    this.botTokens[which] = Math.min(2, this.botTokens[which] + this.botApm / 60 / 24);
+  }
+
+  /** Gate a frame's whole command burst on the APM budget: pass it all (going into
+   *  debt proportional to its size, i.e. a bigger burst buys a longer silence after)
+   *  or drop it all. Never split a burst — bots pair commands (select + the order it
+   *  sets up), and splitting the pair stalls them instead of slowing them down. */
+  #capCommands(out, which) {
+    if (this.botTokens[which] <= 0) return EMPTY;
+    let n = 0;
+    for (let i = 0; i + 2 <= out.length; i += 2 + (out[i] | (out[i + 1] << 8))) n++;
+    // Debt floor: even a huge burst costs at most ~3 s of silence.
+    this.botTokens[which] = Math.max(-this.botApm / 20, this.botTokens[which] - n);
     return out;
   }
 
@@ -378,13 +414,14 @@ export class Lockstep {
         // Spectate bot-vs-bot: both slots come from bots, each on its own replica. The
         // human is a spectator, so drop whatever their clicks staged (camera/select only).
         this.x.openbw_out_clear();
-        this.#batch(bf).set(this.bot.slot, this.#drainBot(this.x, this.memory));
-        this.#batch(bf).set(this.bot2.slot, this.#drainBot(this.shadow.x, this.shadow.memory));
+        this.#batch(bf).set(this.bot.slot, this.#drainBot(this.x, this.memory, 0));
+        this.#batch(bf).set(this.bot2.slot, this.#drainBot(this.shadow.x, this.shadow.memory, 1));
       } else {
         const d = this.#drainLocal();
         this.#batch(f).set(this.localSlot, d);
-        // The bot is a local producer for its slot: run its onFrame every frame and stage its
-        // turn for frame f + botDelay, matching BW's command latency (see BOT_LATENCY).
+        // The bot is a local producer for its slot: run its onFrame every frame (its event
+        // tracking must not skip) and stage its turn for frame f + botDelay — BW's command
+        // latency, stretched by the difficulty setting.
         if (this.bot) this.#batch(bf).set(this.bot.slot, this.#drainBot());
         if (this.slots.length > 1) this.send({ t: 'turn', f, d });
       }

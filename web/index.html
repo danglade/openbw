@@ -260,6 +260,12 @@
   @media (pointer: coarse) {
     #card .cmd { padding: 8px 10px; }
     #card .cmd .ico { width: 28px; height: 28px; }
+    /* Group the icon (build/train/morph) buttons at the end of the wrap, on their own
+       row(s), so a lone one (Lair) lands beside Select Larva instead of orphaned. The
+       ::after sorts between the groups (last in document order among order:0 items)
+       and its 100% basis forces the line break. */
+    #card .cmd:has(.ico) { order: 1; }
+    #card:has(.cmd .ico)::after { content: ''; flex-basis: 100%; height: 0; order: 0; }
     #status .q { padding: 8px 10px; }
     #topbar button { height: 42px; }
     #topbar #pausebtn, #topbar #mute { width: 46px; }
@@ -349,6 +355,11 @@
     </div>
     <div id="map-info"></div>
     <div id="slots"></div>
+    <div id="difficulty-row" style="display:flex;align-items:center;gap:10px;justify-content:center;margin:10px 0">
+      <span class="lbl" style="color:#cbd5e1;font-size:13px">Bot difficulty</span>
+      <input type="range" id="difficulty" min="0" max="2" step="1" value="2" style="width:110px">
+      <span id="difficulty-name" style="color:#38bdf8;font-size:13px;font-weight:600;width:52px;text-align:left">Hard</span>
+    </div>
     <label id="spectate-row" style="display:flex;align-items:center;gap:8px;justify-content:center;margin:10px 0;cursor:pointer">
       <input type="checkbox" id="spectate"> Bot vs Bot (spectate)
     </label>
