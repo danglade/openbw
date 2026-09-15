@@ -15,6 +15,23 @@ const BUILD = '__BUILD__';
 // so test for the placeholder's underscores instead of matching it literally.
 const DEV = BUILD.startsWith('__') || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 
+// Game-start analytics: one anonymous row per game started, fire-and-forget into a
+// dedicated Supabase project (insert-only for the anon key; rows are read in the
+// Supabase dashboard). No-op until ANALYTICS is filled in, and never in dev. Nothing
+// identifying is sent — just what game was set up.
+const ANALYTICS = { url: '', key: '' };   // { url: 'https://<ref>.supabase.co', key: '<publishable key>' }
+function logGameStart(row) {
+  if (DEV || !ANALYTICS.url || !ANALYTICS.key) return;
+  try {
+    fetch(`${ANALYTICS.url}/rest/v1/game_starts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', apikey: ANALYTICS.key, authorization: `Bearer ${ANALYTICS.key}` },
+      body: JSON.stringify(row),
+      keepalive: true,   // survives an immediate navigation
+    }).catch(() => {});
+  } catch {}
+}
+
 // Dev builds swap the favicon to the classic SC icon (prod keeps BW.ICO from the
 // index.html link) so dev tabs are recognizable at a glance. Fetched straight from
 // the Internet Archive, like the MPQs — no Blizzard material in the repo.
@@ -754,6 +771,14 @@ async function boot(session) {
     x.openbw_init(...winSize(), slots[0].race, slots[0].slot);
   }
   hb('boot:engine-ready');
+  logGameStart({
+    map: session.mapFile,
+    mode: session.spectate ? 'spectate' : session.bot ? 'vs-bot' : link ? '1v1' : 'solo',
+    my_race: (slots.find((s) => s.slot === mySlot) || {}).race ?? null,
+    opponent: session.bot ? session.bot.module.replace(/^openbw-|\.wasm$/g, '') : link ? 'human' : 'none',
+    difficulty: session.bot ? ({ 0: 'hard', 60: 'easy', 300: 'normal' }[session.bot.apm ?? 0] || String(session.bot.apm)) : null,
+    mobile: !!(window.matchMedia && matchMedia('(pointer: coarse)').matches),
+  });
   // Attach the BWAPI read-view so the bot can drive its slot (vs-Computer only).
   if (session.bot) { hb('boot:bot-attach'); x.openbw_bot_attach(session.bot.slot); hb('boot:bot-attached'); }
   // Bot-vs-bot spectate: reveal the whole map and stand up the second bot on a shadow
