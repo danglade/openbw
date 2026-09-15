@@ -44,8 +44,21 @@ builds on), this fork adds:
   at full rate; difficulty adds human-like weakness instead — reaction latency and
   an APM budget (dropped commands get re-issued later), so an Easy bot plays slow
   and clumsy rather than broken. Hard is unthrottled tournament strength.
+- **An Elo ladder** ([leaderboard](https://openbw.vercel.app/api/elo?action=table)).
+  Register a username + PIN in the lobby and games against the computer are rated:
+  each bot × difficulty carries a fixed rating (ZZZKBot 900/1200/1500, McRave
+  1000/1350/1700), so the ladder measures who beats which bot at what level.
+  Resigning counts as a loss — and so does abandoning (closing the tab mid-game
+  fires a parting beacon), so there's no dodging a bad game. It's a friendly
+  honor-system ladder: results are reported by the player's own client.
 - **A performance grade on the game-over card** — APM, income/min, % of income
   spent, blended into a grade with a coaching tip.
+- **Spectator controls** — watching Bot vs Bot, "Stop watching" ends the match on
+  the spot and still shows the final score screen.
+- **Anonymous usage stats** ([table](https://openbw.vercel.app/api/stats)) — one
+  row per game started (map, mode, race, opponent, difficulty; nothing
+  identifying), stored in the deployment's own Vercel Blob store. The ladder and
+  the stats share that store — no third-party service anywhere.
 - **Mobile command-card layout** — icon buttons group on their own row instead of
   wrapping awkwardly.
 - **Deploy tooling** for Vercel (`web/deploy-vercel.sh` — stamps the cache-buster
