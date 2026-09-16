@@ -255,6 +255,7 @@ struct play_ui : ui_functions {
 
 	const unit_type_t* pending_build = nullptr;   // building awaiting a placement click
 	bool pending_land = false;                    // that placement is a flying building landing
+	bool pending_nydus = false;                   // that placement is a Nydus Canal's exit
 	const unit_type_t* pending_addon = nullptr;   // placing an addon: pending_build is the parent
 	bool targeting = false;                       // an order awaiting a target click
 	bool paused = false;                          // frozen: ignore game input (camera still ok)
@@ -287,6 +288,7 @@ struct play_ui : ui_functions {
 	               C_FIGHTER,                 // Carrier interceptor / Reaver scarab
 	               C_ARCHON, C_DARCHON,       // High / Dark Templar merges
 	               C_SPELL,                   // a targeted spellcaster ability
+	               C_NYDUS,                   // place a Nydus Canal's exit
 	               C_CANCEL };                // cancel a morph / addon / nuke (opcode in cmd.unit)
 	struct cmd_t { char key; const char* label; cmd_act act; UnitTypes ut; bool enabled = false;
 	               TechTypes tech = TechTypes::None; UpgradeTypes upg = UpgradeTypes::None;
@@ -1156,6 +1158,12 @@ struct play_ui : ui_functions {
 				// Key off a prefix of the label, so the letter the host highlights is the
 				// hotkey. Passing "Larva" picked 'l' and lit the l in "Select" instead.
 				card.push_back({pick_key("Select"), "Select Larva", C_SELECT, U::Zerg_Larva});
+			// A completed Nydus Canal without its exit offers to place one. The engine
+			// builds the exit directly and for free on visible creep (order_BuildNydusExit)
+			// and links the two ends; an exit canal already carries its link back, so it
+			// never offers the button.
+			if (id == U::Zerg_Nydus_Canal && u_completed(u) && !u->building.nydus.exit)
+				card.push_back({pick_key("Nydus"), "Build Nydus Exit", C_NYDUS, U::Zerg_Nydus_Canal});
 		}
 		// Unit abilities (not part of the build/upgrade/research enumeration).
 		if (id == U::Terran_Marine || id == U::Terran_Firebat)
@@ -1743,7 +1751,7 @@ struct play_ui : ui_functions {
 
 	void start_target(targ_t t) { clear_pending(); targeting = true; pending_targ = t; }
 
-	void clear_pending() { pending_build = nullptr; pending_land = false; pending_addon = nullptr; }
+	void clear_pending() { pending_build = nullptr; pending_land = false; pending_nydus = false; pending_addon = nullptr; }
 
 	// Helpers for the flying-building commands, which act on the selected building itself.
 	xy u_pos_of_selected() { unit_t* u = primary_selected(); return u ? u->sprite->position : xy(); }
@@ -1779,6 +1787,8 @@ struct play_ui : ui_functions {
 			case C_BUILDMENU: menu = 1; refresh_card(); break;
 			case C_ADVMENU:   menu = 2; refresh_card(); break;
 			case C_BUILD:     pending_build = get_unit_type(c.ut); menu = 0; refresh_card(); break;
+			case C_NYDUS:     pending_build = get_unit_type(c.ut); pending_nydus = true;
+			                  menu = 0; refresh_card(); break;
 			case C_TRAIN:     if (const unit_type_t* at = get_unit_type(c.ut); at && ut_addon(at)) {
 			                      // Addons ask for a placement (like a building): drop it in place
 			                      // for no lift, or elsewhere to lift off and move there.
@@ -1897,6 +1907,14 @@ struct play_ui : ui_functions {
 			// from it and lifts off only when that differs from where the parent stands.
 			cmd_build(Orders::PlaceAddon, pending_addon,
 			          tx + pending_addon->addon_position.x / 32, ty + pending_addon->addon_position.y / 32);
+			clear_pending();
+			return;
+		}
+		// A Nydus exit is placed by the canal itself and costs nothing — the engine
+		// creates it directly (order_BuildNydusExit) and re-validates the spot.
+		if (pending_nydus) {
+			sync_primary();
+			cmd_build(Orders::BuildNydusExit, pending_build, tx, ty);
 			clear_pending();
 			return;
 		}
