@@ -622,6 +622,30 @@ struct play_ui : ui_functions {
 		on_selection(false);
 	}
 
+	// Select Larva: only the larvae of the currently selected hatcheries — each larva
+	// stays linked to the building that spawned it (connected_unit, see spawn_larva) —
+	// matching the original. Taking the first 12 larvae found anywhere made the button
+	// hop between bases once the player had more than one hatchery. No larvae right
+	// now: keep the hatchery selected, as BW does.
+	void select_larvae_of_selected() {
+		static_vector<unit_t*, 12> parents;
+		for (auto uid : current_selection) {
+			unit_t* u = get_unit(uid);
+			if (u && u->owner == my_player && parents.size() < 12) parents.push_back(u);
+		}
+		static_vector<unit_t*, 12> larvae;
+		for (unit_t* u : ptr(st.player_units[my_player])) {
+			if (!unit_is(u, UnitTypes::Zerg_Larva) || unit_dying(u)) continue;
+			if (std::find(parents.begin(), parents.end(), u->connected_unit) == parents.end()) continue;
+			larvae.push_back(u);
+			if (larvae.size() >= 12) break;
+		}
+		if (larvae.empty()) return;
+		current_selection_clear();
+		for (unit_t* u : larvae) current_selection_add(u);
+		on_selection(false);
+	}
+
 	// Add everything `u` can currently produce — the whole tech tree, gated by the
 	// engine's own can-build/upgrade/research checks so a button appears as soon as its
 	// prerequisites are met. buildings_only splits the worker's build submenu (which
@@ -1766,7 +1790,9 @@ struct play_ui : ui_functions {
 			                  break;
 			case C_MORPH:     sync_selection(); cmd_type(35, c.ut); break;
 			case C_MORPHBLDG: sync_selection(); cmd_type(53, c.ut); break;
-			case C_SELECT:    select_units_of_type(c.ut); break;
+			case C_SELECT:    if (c.ut == UnitTypes::Zerg_Larva) select_larvae_of_selected();
+			                  else select_units_of_type(c.ut);
+			                  break;
 			case C_RALLY:     start_target(T_RALLY); break;
 			case C_RESEARCH:  sync_selection(); cmd_id8(48, (int)c.tech); break;
 			case C_UPGRADE:   sync_selection(); cmd_id8(50, (int)c.upg); break;
