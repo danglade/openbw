@@ -35,6 +35,10 @@ builds on), this fork adds:
   Lair, Lair to Hive, Creep Colony to Sunken/Spore, Spire to Greater Spire, each
   shown grayed with its "Requires …" prerequisite until available (also submitted
   upstream as [PR #1](https://github.com/heiner/openbw/pull/1)).
+- **More restored abilities**: Nydus Canal exits can be built (select a completed
+  canal → Build Nydus Exit, placed free on visible creep, ride through with a
+  right-click), the Shield Battery has its Recharge Shields button back, and
+  Select Larva picks the selected hatchery's own larvae instead of hopping bases.
 - **Bot strategy variety.** The computer opponents (ZZZKBot — AIIDE 2015/2017
   winner — and McRave) played the same opening every game: their tournament
   learning files don't exist in the browser, McRave's RNG was never seeded, and a

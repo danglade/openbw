@@ -289,6 +289,7 @@ struct play_ui : ui_functions {
 	               C_ARCHON, C_DARCHON,       // High / Dark Templar merges
 	               C_SPELL,                   // a targeted spellcaster ability
 	               C_NYDUS,                   // place a Nydus Canal's exit
+	               C_RECHARGE,                // Shield Battery: targeted shield recharge
 	               C_CANCEL };                // cancel a morph / addon / nuke (opcode in cmd.unit)
 	struct cmd_t { char key; const char* label; cmd_act act; UnitTypes ut; bool enabled = false;
 	               TechTypes tech = TechTypes::None; UpgradeTypes upg = UpgradeTypes::None;
@@ -1164,6 +1165,11 @@ struct play_ui : ui_functions {
 			// never offers the button.
 			if (id == U::Zerg_Nydus_Canal && u_completed(u) && !u->building.nydus.exit)
 				card.push_back({pick_key("Nydus"), "Build Nydus Exit", C_NYDUS, U::Zerg_Nydus_Canal});
+			// Shield Battery: the targeted recharge from the original. The engine orders
+			// the clicked unit (or shielded units near a ground click) to come to the
+			// battery and refill (order_RechargeShieldsBattery).
+			if (id == U::Protoss_Shield_Battery && u_completed(u))
+				card.push_back({pick_key("Recharge"), "Recharge Shields", C_RECHARGE, U::None});
 		}
 		// Unit abilities (not part of the build/upgrade/research enumeration).
 		if (id == U::Terran_Marine || id == U::Terran_Firebat)
@@ -1789,6 +1795,9 @@ struct play_ui : ui_functions {
 			case C_BUILD:     pending_build = get_unit_type(c.ut); menu = 0; refresh_card(); break;
 			case C_NYDUS:     pending_build = get_unit_type(c.ut); pending_nydus = true;
 			                  menu = 0; refresh_card(); break;
+			case C_RECHARGE:  pending_spell_order = Orders::RechargeShieldsBattery;
+			                  pending_spell_unit = true;   // pass a clicked unit; ground falls back to nearby
+			                  start_target(T_SPELL); break;
 			case C_TRAIN:     if (const unit_type_t* at = get_unit_type(c.ut); at && ut_addon(at)) {
 			                      // Addons ask for a placement (like a building): drop it in place
 			                      // for no lift, or elsewhere to lift off and move there.
